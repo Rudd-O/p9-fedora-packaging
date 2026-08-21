@@ -5,7 +5,7 @@
 %global crate p9
 
 Name:           rust-p9
-Version:        0.2.3
+Version:        0.3.2
 Release:        %autorelease
 Summary:        Server implementation of the 9p file system protocol
 

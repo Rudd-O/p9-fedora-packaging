@@ -4,7 +4,7 @@
 
 genericFedoraRPMPipeline(
 	{
-        downloadCrateSourceFromSpecfile sha256sum: "4838a2d89bdcbcad051f18347ed6cbe3e5b9b09fb0019e1a6ec4bb2bb1d29481"
+        downloadCrateSourceFromSpecfile sha256sum: "0dc5b2b13cb6a9a5fcf7c668ebf2aef67e0d83d4451c1db95feb9fb0775874f0"
 	},
 	{
 		SRPMStrategyRpmbuildBs()()
