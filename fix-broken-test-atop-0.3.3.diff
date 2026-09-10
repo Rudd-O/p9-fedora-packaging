@@ -1,0 +1,86 @@
+commit 25c15d852a8723c8530c36a43d4ccee9b7453459
+Author: Manuel Amador (Rudd-O) <rudd-o@rudd-o.com>
+Date:   Fri Sep 11 10:25:59 2026 +0000
+
+    Fix broken test.
+    
+    This fix allows the server to process '.' and '..' in Twalk
+    
+    The path traversal protection added in 37ff802 rejected '.' and '..'
+    in Twalk via validate_path_component(), but per the 9p protocol the
+    parent of the root directory is the root itself, so both are legal
+    walk components. do_walk() already handles them ('.' as a no-op,
+    '..' clamped at the root by a dev/ino comparison), but the validator
+    ran first, making that logic dead code and failing valid walks with
+    EINVAL.
+    
+    Remove the validate_path_component() call only from do_walk(); the
+    empty and '/' checks are already done inline, and the name-based
+    operations (lcreate, mkdir, link, rename_at, unlink_at) keep
+    rejecting these names, where they are invalid.
+    
+    Test: path_traversal_protection, plus a new case walking
+    ["..", "..", "subdir"] from the root to verify leading '..' clamps
+    instead of escaping.
+
+diff --git a/src/server/mod.rs b/src/server/mod.rs
+index 0393664..398e0e3 100644
+--- a/src/server/mod.rs
++++ b/src/server/mod.rs
+@@ -332,7 +332,13 @@ fn do_walk(
+     let mut current = MaybeOwned::Borrowed(start);
+ 
+     for wname in wnames {
+-        validate_path_component(&wname)?;
++        // Deliberately does not call `validate_path_component()`: "." and ".."
++        // are legal walk components ("the parent of the root directory of a
++        // server's tree is itself", per the 9p protocol) and are handled
++        // below.  Note the containment guarantee comes from the fd chain:
++        // every fid path is an O_PATH fd derived from the root fd via
++        // `openat` with `O_NOFOLLOW`, and the dev/ino check on `..` below
++        // keeps the walk at or below the root.
+         let wname_bytes = wname.as_c_str().to_bytes();
+ 
+         // Sanity check: path component must not be empty and must not contain bytes that are path separators ('/')
+diff --git a/src/server/tests.rs b/src/server/tests.rs
+index c8eb076..ef94b44 100644
+--- a/src/server/tests.rs
++++ b/src/server/tests.rs
+@@ -1369,7 +1369,7 @@ fn path_traversal_protection() {
+     assert_eq!(rwalk.wqids.len(), 1);
+     check_qid(&rwalk.wqids[0], &root_metadata);
+ 
+-    // 2. Walking "subdir", "..", ".." stays at root
++    // 2. Walking "subdir" then up past where the root would be stays at root
+     let fid2 = ROOT_FID + 2;
+     let twalk = Twalk {
+         fid: ROOT_FID,
+@@ -1384,6 +1384,28 @@ fn path_traversal_protection() {
+     assert_eq!(rwalk.wqids.len(), 3);
+     check_qid(&rwalk.wqids[2], &root_metadata);
+ 
++    // 2b. Clamping the leading ".." components and walking down afterwards
++    // must not escape the root
++    let subdir_metadata = test_dir
++        .join("subdir")
++        .symlink_metadata()
++        .expect("failed to get subdir metadata");
++    let fid2b = ROOT_FID + 6;
++    let twalk = Twalk {
++        fid: ROOT_FID,
++        newfid: fid2b,
++        wnames: vec![
++            P9String::new("..").unwrap(),
++            P9String::new("..").unwrap(),
++            P9String::new("subdir").unwrap(),
++        ],
++    };
++    let rwalk = server.walk(twalk).expect("failed to walk ../../subdir");
++    assert_eq!(rwalk.wqids.len(), 3);
++    check_qid(&rwalk.wqids[0], &root_metadata);
++    check_qid(&rwalk.wqids[1], &root_metadata);
++    check_qid(&rwalk.wqids[2], &subdir_metadata);
++
+     // 3. Walking with an empty component or component containing '/' should return EINVAL
+     let fid3 = ROOT_FID + 3;
+     let twalk = Twalk {

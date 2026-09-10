@@ -5,13 +5,19 @@
 %global crate p9
 
 Name:           rust-p9
-Version:        0.3.2
+Version:        0.3.3
 Release:        %autorelease
 Summary:        Server implementation of the 9p file system protocol
 
 License:        BSD-3-Clause
 URL:            https://crates.io/crates/p9
-Source:         %{crates_source}
+Source:         https://crates.io/api/v1/crates/p9/0.3.2/download#/p9-0.3.2.crate
+# Note percent{crates source} used to be above this line.
+# Restore it ASAP when the fixed crate is available, and drop the patches then.
+Patch0:         a8f3a19-accept-ref.diff
+Patch1:         37ff802-prevent-path-traversal.diff
+Patch2:         bump-to-0.3.3.diff
+Patch3:         fix-broken-test-atop-0.3.3.diff
 
 BuildRequires:  cargo-rpm-macros >= 24
 
@@ -60,7 +66,7 @@ use the "trace" feature of the "%{crate}" crate.
 %ghost %{crate_instdir}/Cargo.toml
 
 %prep
-%autosetup -n %{crate}-%{version} -p1
+%autosetup -n %{crate}-0.3.2 -p1
 %cargo_prep
 
 %generate_buildrequires
